@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多态闪卡与长图生成交互原型</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    /* 隐藏全局与自定义滚动条，保持移动端 UI 的整洁 */
+    ::-webkit-scrollbar { display: none; }
+    .custom-scrollbar::-webkit-scrollbar { display: none; }
+    .custom-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* 补充 3D 卡片层叠所需透视样式 */
+    .perspective-1000 { perspective: 1000px; }
+
+    /* 补充 Tailwind 插件缺失的基础动画 */
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    .animate-in {
+      animation-duration: 300ms;
+      animation-timing-function: ease-out;
+      animation-fill-mode: forwards;
+    }
+    .fade-in {
+      animation-name: fadeIn;
+    }
+  </style>
+</head>
+<body class="bg-[#e5e5e5]">
+  <div id="root"></div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.292.0"
+      }
+    }
+  </script>
+
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { 
+      Headphones, Play, Pause, Lightbulb, ChevronRight, ChevronLeft, 
+      X, Sparkles, ChevronDown, LayoutGrid, Plus, PenTool,
+      CheckCircle2, Circle, Share2, ArrowLeft, TrendingUp, TrendingDown,
+      Target, BarChart2, CheckSquare, Download, Loader2, FileText
+    } from 'lucide-react';
+
+    function App() {
+      const [showSummary, setShowSummary] = useState(false);
+      const [docType, setDocType] = useState('report'); 
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [isPodcastPlaying, setIsPodcastPlaying] = useState(false);
+      const [checkedSteps, setCheckedSteps] = useState({});
+      const [touchStart, setTouchStart] = useState(0);
+      const [touchEnd, setTouchEnd] = useState(0);
+      
+      const [showSelector, setShowSelector] = useState(false);
+      
+      const [isTracing, setIsTracing] = useState(false);
+      const [traceText, setTraceText] = useState('');
+      const [isGeneratingImg, setIsGeneratingImg] = useState(false);
+      const [showLongImage, setShowLongImage] = useState(false);
+
+      const openSummary = (type) => {
+        setDocType(type);
+        setCurrentIndex(0);
+        setIsPodcastPlaying(false);
+        setShowSelector(false);
+        setShowSummary(true);
+        setIsTracing(false);
+      };
+
+      const handleTrace = (text) => {
+        setTraceText(text);
+        setIsTracing(true); 
+      };
+
+      const closeTrace = () => {
+        setIsTracing(false);
+      };
+
+      const handleGenerateLongImg = () => {
+        setIsGeneratingImg(true);
+        setTimeout(() => {
+          setIsGeneratingImg(false);
+          setShowLongImage(true);
+        }, 1500);
+      };
+
+      const reportCards = [
+        {
+          type: 'conclusion',
+          title: '核心结论',
+          content: '未来 AI 产品的决胜点不在于“字数”，而在于“帮用户省了多少脑力”。信息消费正在向“刷卡”演进。',
+          bgClass: 'bg-gradient-to-br from-blue-600 to-indigo-600'
+        },
+        {
+          type: 'insight',
+          title: '洞察一：信息的降维',
+          content: '把信息的颗粒度打碎，让用户像刷知识卡片一样消费，降低长文本带来的压迫感。',
+          sourceText: '在快节奏时代，用户的注意力时长已经缩短至 8 秒。研究表明，长篇大论的纯文本总结往往会被用户直接跳过。而卡片式的交互，能够有效降低认知负荷...'
+        },
+        {
+          type: 'insight',
+          title: '洞察二：场景化动态适配',
+          content: 'AI 应该具备“读空气”的能力。遇到攻略就出步骤卡，遇到财报就出红黑榜。',
+          sourceText: '2026年，单一的文本总结已无法满足垂直场景的效率需求。AI需要理解文档格式，自动为数据报表生成趋势图，为SOP生成核对清单...'
+        }
+      ];
+
+      const sopCards = [
+        {
+          type: 'prerequisite',
+          title: '核心前置条件',
+          content: '打败【虎先锋】的终极准备工作',
+          requirements: ['建议等级：Lv.35+', '必备法宝：定风珠', '丹药储备：避凶药 x3'],
+          bgClass: 'bg-gradient-to-br from-orange-600 to-red-700'
+        },
+        {
+          type: 'step',
+          stepId: 'step1',
+          title: 'Step 1：开局起手式',
+          content: '进场后立刻向右侧翻滚躲避居合斩，随后使用【定身术】打出一套轻棍连招。',
+          tips: '💡 贪刀必败，打完一套立刻拉开距离。'
+        },
+        {
+          type: 'step',
+          stepId: 'step2',
+          title: 'Step 2：应对铜头铁臂',
+          content: '当BOSS变暗发功时，千万不要普攻，使用【蓄力劈棍】破防！',
+          tips: '💡 破防后会有一段硬直，是输出的最佳时机。'
+        }
+      ];
+
+      const dataCards = [
+        {
+          type: 'metric',
+          title: '核心指标异动',
+          metric: '+24.5%',
+          isPositive: true,
+          content: '本季度净营收创历史新高',
+          subText: '主要由海外电商业务爆发驱动，远超预期 12%。',
+          bgClass: 'bg-gradient-to-br from-emerald-600 to-teal-700'
+        },
+        {
+          type: 'ranking',
+          title: '📈 红榜 Top 3 (增长引擎)',
+          items: [
+            { name: '东南亚大区', value: '+45%', trend: [30, 40, 45, 60, 80, 100], isPositive: true },
+            { name: '智能硬件产品线', value: '+32%', trend: [20, 30, 50, 40, 70, 90], isPositive: true },
+            { name: 'SaaS 订阅服务', value: '+18%', trend: [40, 45, 55, 65, 75, 80], isPositive: true }
+          ]
+        }
+      ];
+
+      const getActiveCards = () => {
+        let baseCards = [];
+        if (docType === 'report') baseCards = reportCards;
+        else if (docType === 'sop') baseCards = sopCards;
+        else if (docType === 'data') baseCards = dataCards;
+        return [...baseCards, { type: 'action' }];
+      };
+
+      const activeCards = getActiveCards();
+
+      const toggleStep = (e, stepId) => {
+        e.stopPropagation();
+        setCheckedSteps(prev => ({ ...prev, [stepId]: !prev[stepId] }));
+      };
+
+      const handleTouchStart = (e) => setTouchStart(e.targetTouches[0].clientX);
+      const handleTouchMove = (e) => setTouchEnd(e.targetTouches[0].clientX);
+      const handleTouchEnd = () => {
+        if (!touchStart || !touchEnd) return;
+        const distance = touchStart - touchEnd;
+        if (distance > 50 && currentIndex < activeCards.length - 1) setCurrentIndex(prev => prev + 1);
+        if (distance < -50 && currentIndex > 0) setCurrentIndex(prev => prev - 1);
+        setTouchStart(0);
+        setTouchEnd(0);
+      };
+
+      const nextCard = () => currentIndex < activeCards.length - 1 && setCurrentIndex(prev => prev + 1);
+      const prevCard = () => currentIndex > 0 && setCurrentIndex(prev => prev - 1);
+
+      const renderCardContent = (card) => {
+        switch (card.type) {
+          case 'conclusion':
+            return (
+              <div className={`w-full h-full ${card.bgClass} text-white p-8 flex flex-col justify-center relative`}>
+                <div className="absolute top-6 left-6 flex items-center gap-2 opacity-80">
+                  <Sparkles size={18} />
+                  <span className="text-sm font-medium tracking-wider uppercase">Bottom Line</span>
+                </div>
+                <h3 className="text-3xl font-extrabold leading-tight tracking-tight mb-6 mt-8">{card.content}</h3>
+              </div>
+            );
+          
+          case 'insight':
+            return (
+              <div className="w-full h-full bg-white flex flex-col">
+                <div className="p-8 flex-1 flex flex-col">
+                  <div className="inline-block px-3 py-1 bg-indigo-50 text-indigo-600 text-xs font-bold rounded-full w-max mb-6">
+                    {card.title}
+                  </div>
+                  <h3 className="text-[22px] font-bold leading-snug text-gray-900 mb-4">{card.content}</h3>
+                </div>
+                <div className="bg-gray-50 p-6 border-t border-gray-100">
+                  <p className="text-xs text-gray-500 italic mb-4 line-clamp-2 border-l-2 border-indigo-300 pl-3">
+                    “{card.sourceText}”
+                  </p>
+                  <button 
+                    onClick={() => handleTrace(card.sourceText)}
+                    className="w-full py-3.5 bg-gray-900 text-white rounded-[14px] text-[14px] font-medium flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors active:scale-95 shadow-sm"
+                  >
+                    <FileText size={16} className="text-gray-300" /> 溯源原文上下文
+                  </button>
+                </div>
+              </div>
+            );
+
+          case 'prerequisite':
+          case 'metric':
+            return (
+              <div className={`w-full h-full ${card.bgClass} text-white p-8 flex flex-col relative`}>
+                <div className="flex items-center gap-2 mb-8 opacity-90 border-b border-white/20 pb-4">
+                  {card.type === 'metric' ? <BarChart2 size={24} /> : <Target size={24} />}
+                  <span className="text-lg font-bold tracking-wide">{card.title}</span>
+                </div>
+                {card.type === 'metric' ? (
+                  <>
+                    <div className="flex items-end gap-3 mb-4">
+                      <h2 className="text-6xl font-black tracking-tighter">{card.metric}</h2>
+                      <TrendingUp size={32} className="text-emerald-200 mb-2" />
+                    </div>
+                    <h3 className="text-2xl font-bold leading-tight mb-4">{card.content}</h3>
+                    <p className="text-emerald-100 text-[15px] leading-relaxed bg-black/10 p-4 rounded-xl mt-auto">{card.subText}</p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-2xl font-bold leading-tight mb-8">{card.content}</h3>
+                    <div className="flex flex-col gap-4 mt-auto">
+                      {card.requirements.map((req, i) => (
+                        <div key={i} className="flex items-start gap-3 bg-black/20 p-4 rounded-2xl">
+                          <CheckSquare size={20} className="text-orange-200 shrink-0 mt-0.5" />
+                          <span className="text-[15px] leading-snug font-medium text-orange-50">{req}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+
+          case 'step':
+            const isChecked = checkedSteps[card.stepId] || false;
+            return (
+              <div className="w-full h-full bg-white flex flex-col">
+                <div className="p-8 flex-1 flex flex-col">
+                  <div className="inline-block px-3 py-1 bg-orange-50 text-orange-600 text-xs font-bold rounded-full w-max mb-6 border border-orange-100">
+                    {card.title}
+                  </div>
+                  <h3 className={`text-[22px] font-bold leading-relaxed transition-all ${isChecked ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                    {card.content}
+                  </h3>
+                  <div className="mt-6 bg-orange-50/50 p-4 rounded-xl text-[14px] text-orange-800 border border-orange-100/50">
+                    {card.tips}
+                  </div>
+                </div>
+                <div className="p-6 border-t border-gray-100 bg-gray-50 flex items-center justify-between cursor-pointer active:bg-gray-100" onClick={(e) => toggleStep(e, card.stepId)}>
+                  <span className={`font-semibold text-[15px] ${isChecked ? 'text-gray-400' : 'text-gray-900'}`}>
+                    {isChecked ? '已完成该步骤' : '标记为已完成'}
+                  </span>
+                  <button className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isChecked ? 'bg-orange-500 text-white' : 'bg-white border-2 border-gray-300 text-gray-300'}`}>
+                    {isChecked ? <CheckCircle2 size={24} /> : <Circle size={24} />}
+                  </button>
+                </div>
+              </div>
+            );
+
+          case 'ranking':
+            return (
+              <div className="w-full h-full bg-white flex flex-col">
+                <div className="p-6 border-b border-gray-100">
+                  <h3 className="text-xl font-bold text-gray-900">{card.title}</h3>
+                </div>
+                <div className="flex-1 p-2 overflow-y-auto custom-scrollbar">
+                  {card.items.map((item, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => handleTrace(`【单元格精细溯源】\n\n表单：亚太区 Q3 销售明细\n维度：${item.name}\n指标：${item.value}\n说明：AI 自动从底层系统聚合运算得出。环比上一周期存在显著异动，建议重点关注。`)}
+                      className="p-4 border-b border-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors group"
+                    >
+                      <div>
+                        <div className="text-[15px] font-semibold text-gray-900 mb-1 flex items-center gap-1.5">
+                          {item.name}
+                          <div className="flex items-center text-[10px] text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                            <FileText size={10} className="mr-0.5" /> 溯源
+                          </div>
+                        </div>
+                        <div className={`text-[17px] font-black ${item.isPositive ? 'text-emerald-600' : 'text-red-600'}`}>{item.value}</div>
+                      </div>
+                      <div className="flex items-end gap-[3px] h-8 w-16 opacity-70">
+                        {item.trend.map((h, i) => (
+                          <div key={i} style={{ height: `${h}%` }} className={`w-1.5 rounded-t-[2px] ${item.isPositive ? 'bg-emerald-400' : 'bg-red-400'}`}></div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+
+          case 'action':
+            return (
+              <div className="w-full h-full bg-[#111] text-white p-8 flex flex-col justify-center items-center text-center relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 blur-3xl"></div>
+                
+                <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-6 relative z-10">
+                  <CheckCircle2 size={32} className="text-emerald-400" />
+                </div>
+                <h3 className="text-2xl font-bold mb-2 relative z-10">阅读完成！</h3>
+                <p className="text-gray-400 text-sm mb-12 relative z-10">你已掌握了这份文档的核心精华</p>
+                
+                <div className="w-full flex flex-col gap-4 relative z-10">
+                  <button 
+                    onClick={handleGenerateLongImg}
+                    disabled={isGeneratingImg}
+                    className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-[16px] font-semibold flex items-center justify-center gap-2 hover:opacity-90 active:scale-95 transition-all"
+                  >
+                    {isGeneratingImg ? (
+                      <><Loader2 size={18} className="animate-spin" /> 生成排版中...</>
+                    ) : (
+                      <><Share2 size={18} /> 生成长图分享</>
+                    )}
+                  </button>
+                  <button 
+                    onClick={() => setShowSummary(false)}
+                    className="w-full py-4 bg-white/10 hover:bg-white/20 rounded-[16px] font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 text-white/90"
+                  >
+                    <ArrowLeft size={18} /> 返回完整原文
+                  </button>
+                </div>
+              </div>
+            );
+          
+          default:
+            return null;
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-[#e5e5e5] flex items-center justify-center p-4 font-sans text-gray-800">
+          <div className="w-full max-w-[400px] h-[812px] bg-[#9a9a9a] rounded-[48px] shadow-2xl overflow-hidden relative border-[12px] border-gray-900 flex flex-col">
+            
+            {/* 手机顶部状态栏 */}
+            <div className="h-12 w-full flex justify-between items-center px-6 text-xs font-medium text-gray-900 pt-2 relative z-0">
+              <span>9:41</span>
+              <div className="flex gap-1.5">
+                <div className="w-4 h-3 bg-gray-900 rounded-sm"></div>
+                <div className="w-4 h-3 bg-gray-900 rounded-sm"></div>
+                <div className="w-5 h-3 bg-gray-900 rounded-sm"></div>
+              </div>
+            </div>
+
+            {/* --- 背景层：溯源时的模拟文档 --- */}
+            <div className={`absolute inset-0 top-12 bg-white transition-all duration-[600ms] ease-[cubic-bezier(0.23,1,0.32,1)] p-6 z-20 ${isTracing ? 'opacity-100 scale-100 pointer-events-auto translate-y-0' : 'opacity-0 scale-95 pointer-events-none -translate-y-4'}`}>
+              <h2 className="text-xl font-bold mb-6 mt-4">
+                {docType === 'report' ? '2026 AI 交互趋势洞察' : docType === 'data' ? 'Q3 亚太区电商销售报表' : '黑神话悟空攻略'}
+              </h2>
+              {/* 模拟段落 */}
+              <div className="space-y-4 text-gray-400 text-sm leading-relaxed">
+                <div className="h-4 w-full bg-gray-100 rounded"></div>
+                <div className="h-4 w-5/6 bg-gray-100 rounded"></div>
+                <div className="h-4 w-4/5 bg-gray-100 rounded"></div>
+                
+                {/* 高亮展示溯源文本 */}
+                <div className={`my-6 p-1 rounded transition-all duration-700 delay-200 ease-out border-l-4 ${isTracing ? 'bg-yellow-100/80 border-yellow-400 pl-4 opacity-100 translate-x-0' : 'bg-transparent border-transparent pl-0 opacity-0 -translate-x-4'}`}>
+                  <p className="text-gray-800 font-medium whitespace-pre-wrap leading-relaxed">
+                    {traceText}
+                  </p>
+                </div>
+
+                <div className="h-4 w-full bg-gray-100 rounded"></div>
+                <div className="h-4 w-3/4 bg-gray-100 rounded"></div>
+                <div className="h-4 w-full bg-gray-100 rounded"></div>
+              </div>
+              
+              {/* 悬浮返回按钮 */}
+              <div className={`absolute bottom-12 left-0 w-full flex justify-center z-10 transition-all duration-500 delay-300 ${isTracing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+                <div className="animate-[bounce_2s_infinite]">
+                  <button 
+                    onClick={closeTrace}
+                    className="bg-gray-900 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-2 text-sm font-medium hover:scale-105 transition-transform"
+                  >
+                    <ArrowLeft size={16} /> 返回闪卡继续阅读
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1"></div>
+
+            {/* --- [高度还原设计图] 底层：AI 助手浮层面板 --- */}
+            <div className={`h-[85%] bg-white rounded-t-[32px] flex flex-col relative z-10 transition-transform duration-500 ${showSummary ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'}`}>
+              
+              {/* 顶部把手与标题 */}
+              <div className="flex justify-center items-center h-14 relative w-full pt-2">
+                <span className="font-semibold text-[15px] text-gray-900">AI文档助手</span>
+                <ChevronDown size={20} className="absolute right-6 text-gray-500" />
+              </div>
+
+              <div className="px-6 mt-2">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Hi，有什么可以帮你？</h1>
+                <p className="text-gray-500 text-[13px] leading-relaxed">
+                  你似乎在浏览一份入学信息统计表，我可以帮你
+                </p>
+              </div>
+
+              {/* 快捷 Prompt 列表 */}
+              <div className="px-6 mt-6 flex flex-col gap-3">
+                <button className="bg-[#f5f6f8] text-left px-5 py-4 rounded-[16px] text-[14px] text-gray-800 font-medium">
+                  根据表格内容提供3个关键洞察
+                </button>
+                <button className="bg-[#f5f6f8] text-left px-5 py-4 rounded-[16px] text-[14px] text-gray-800 font-medium">
+                  优化表头高度和字体样式
+                </button>
+                <button className="bg-[#f5f6f8] text-left px-5 py-4 rounded-[16px] text-[14px] text-gray-800 font-medium">
+                  加粗所有带人名的单元格
+                </button>
+              </div>
+
+              <div className="flex-1"></div>
+
+              {/* --- 输入框上方的功能胶囊按钮 --- */}
+              <div className="px-6 flex gap-3 mb-5">
+                <button 
+                  onClick={() => setShowSelector(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-200 rounded-full shadow-sm text-[13px] font-medium text-gray-700 active:scale-95 transition-all"
+                >
+                  <PenTool size={14} className="text-gray-600" /> 功能A (总结)
+                </button>
+                <button className="flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-200 rounded-full shadow-sm text-[13px] font-medium text-gray-700 active:scale-95 transition-all">
+                  <LayoutGrid size={14} className="text-gray-600" /> 功能B
+                </button>
+              </div>
+
+              {/* 底部语音输入框 --- */}
+              <div className="px-6 mb-8">
+                <div className="h-14 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.06)] rounded-[28px] flex items-center justify-between px-3 border border-gray-50">
+                  <button className="w-10 h-10 flex items-center justify-center rounded-full text-gray-800 border border-gray-200">
+                    <LayoutGrid size={18} />
+                  </button>
+                  <span className="text-gray-800 font-medium text-[15px] flex-1 text-center cursor-pointer">按住 说话</span>
+                  <button className="w-10 h-10 flex items-center justify-center rounded-full text-gray-800 border border-gray-800">
+                    <Plus size={20} strokeWidth={2.5} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1 bg-gray-900 rounded-full"></div>
+              
+              {/* 半透明遮罩 --- */}
+              {showSelector && (
+                <div className="absolute inset-0 bg-black/40 z-20 rounded-t-[32px] transition-opacity duration-300" onClick={() => setShowSelector(false)}></div>
+              )}
+
+              {/* Action Sheet (演示选择器) --- */}
+              <div className={`absolute inset-x-0 bottom-0 bg-white rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-30 transition-transform duration-300 ${showSelector ? 'translate-y-0' : 'translate-y-full'}`}>
+                <div className="px-6 pt-6 pb-10">
+                  <div className="flex justify-between items-center mb-5">
+                    <h3 className="text-[16px] font-bold text-gray-900">请选择体验的展示模式</h3>
+                    <button onClick={() => setShowSelector(false)} className="p-1.5 text-gray-400 hover:text-gray-600 bg-gray-100 rounded-full">
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <button onClick={() => openSummary('report')} className="bg-[#f5f6f8] text-left px-5 py-4 rounded-[16px] flex items-center justify-between group">
+                      <div>
+                        <div className="text-[14px] text-gray-900 font-semibold">《2026 AI 交互报告》</div>
+                        <div className="text-[12px] text-gray-500 mt-1">演示：“溯源原文” 链路</div>
+                      </div>
+                      <Sparkles size={16} className="text-indigo-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                    <button onClick={() => openSummary('sop')} className="bg-[#f5f6f8] text-left px-5 py-4 rounded-[16px] flex items-center justify-between group">
+                      <div>
+                        <div className="text-[14px] text-gray-900 font-semibold">《黑神话悟空：虎先锋》</div>
+                        <div className="text-[12px] text-gray-500 mt-1">演示：SOP 打卡模式</div>
+                      </div>
+                      <CheckSquare size={16} className="text-orange-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                    <button onClick={() => openSummary('data')} className="bg-[#f5f6f8] text-left px-5 py-4 rounded-[16px] flex items-center justify-between group">
+                      <div>
+                        <div className="text-[14px] text-gray-900 font-semibold">《Q3 亚太区电商销售报表》</div>
+                        <div className="text-[12px] text-gray-500 mt-1">演示：数据可视化 + 单元格溯源</div>
+                      </div>
+                      <BarChart2 size={16} className="text-emerald-500 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* --- 顶层：多态闪卡与播客组件 --- */}
+            <div 
+              className={`absolute inset-0 bg-[#f4f5f7] z-50 flex flex-col transition-all duration-[600ms] ease-[cubic-bezier(0.23,1,0.32,1)] origin-bottom ${
+                showSummary && !isTracing ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-[110%] opacity-0 scale-90 pointer-events-none'
+              }`}
+            >
+              {/* 弹窗顶部栏 */}
+              <div className="px-5 pt-12 pb-4 flex items-center justify-between relative z-20">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} className="text-indigo-600" />
+                  <h2 className="text-[17px] font-bold text-gray-900">智能速览</h2>
+                </div>
+                <button onClick={() => setShowSummary(false)} className="p-2 bg-gray-200/60 rounded-full text-gray-600 hover:bg-gray-300">
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* 播客模式按钮 */}
+              <div className="px-5 mb-6 relative z-20">
+                <button 
+                  onClick={() => setIsPodcastPlaying(!isPodcastPlaying)}
+                  className={`w-full relative overflow-hidden rounded-[20px] p-4 flex items-center justify-between transition-all duration-300 shadow-sm ${
+                    isPodcastPlaying ? 'bg-gray-900 text-white shadow-lg' : 'bg-white border border-gray-200 text-gray-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 relative z-10">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPodcastPlaying ? 'bg-indigo-500' : 'bg-gray-100 text-gray-800'}`}>
+                      {isPodcastPlaying ? <Pause size={18} className="text-white fill-current" /> : <Play size={18} className="ml-1 fill-current" />}
+                    </div>
+                    <div className="text-left">
+                      <div className="font-bold text-[15px] flex items-center gap-2">
+                        播客听书
+                        {isPodcastPlaying && (
+                          <span className="flex items-end gap-0.5 h-3">
+                            <span className="w-0.5 h-full bg-indigo-400 animate-[bounce_1s_infinite]"></span>
+                            <span className="w-0.5 h-2/3 bg-indigo-400 animate-[bounce_1s_infinite_0.2s]"></span>
+                            <span className="w-0.5 h-full bg-indigo-400 animate-[bounce_1s_infinite_0.4s]"></span>
+                          </span>
+                        )}
+                      </div>
+                      <div className={`text-xs mt-0.5 ${isPodcastPlaying ? 'text-gray-300' : 'text-gray-500'}`}>
+                        {isPodcastPlaying ? '不到一分钟，听懂核心逻辑...' : '锁屏也能听懂文档精髓'}
+                      </div>
+                    </div>
+                  </div>
+                  <Headphones size={24} className={`relative z-10 ${isPodcastPlaying ? 'text-indigo-400' : 'text-gray-300'}`} />
+                </button>
+              </div>
+
+              {/* 闪卡轮播区域 */}
+              <div className="flex-1 relative w-full flex items-center justify-center px-5 pb-8">
+                <div 
+                  className="w-full h-[460px] relative perspective-1000"
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                >
+                  {activeCards.map((card, index) => {
+                    let isActive = index === currentIndex;
+                    let isPrev = index < currentIndex;
+                    let isNext = index > currentIndex;
+                    
+                    let translateX = '0%';
+                    let scale = 1;
+                    let zIndex = 10;
+                    let opacity = 1;
+
+                    if (isPrev) {
+                      translateX = '-110%';
+                      scale = 0.85;
+                      zIndex = 0;
+                      opacity = 0;
+                    } else if (isNext) {
+                      translateX = `${(index - currentIndex) * 6}%`;
+                      scale = 1 - (index - currentIndex) * 0.04;
+                      zIndex = 10 - (index - currentIndex);
+                      opacity = 1 - (index - currentIndex) * 0.15;
+                    }
+
+                    return (
+                      <div 
+                        key={index}
+                        className={`absolute inset-0 rounded-[28px] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] transition-all duration-500 ease-out flex flex-col overflow-hidden border border-white/40 bg-white`}
+                        style={{
+                          transform: `translateX(${translateX}) scale(${scale})`,
+                          zIndex: zIndex,
+                          opacity: opacity,
+                          pointerEvents: isActive ? 'auto' : 'none'
+                        }}
+                      >
+                        {renderCardContent(card)}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 辅助导航按钮 */}
+                <div className="absolute top-1/2 -translate-y-1/2 w-full px-1 flex justify-between pointer-events-none z-20">
+                  <button 
+                    onClick={prevCard}
+                    className={`w-11 h-11 rounded-full bg-white/90 shadow-lg flex items-center justify-center pointer-events-auto transition-opacity ${currentIndex === 0 ? 'opacity-0' : 'opacity-100 hover:bg-white'}`}
+                  >
+                    <ChevronLeft size={24} className="text-gray-800 -ml-0.5" />
+                  </button>
+                  <button 
+                    onClick={nextCard}
+                    className={`w-11 h-11 rounded-full bg-white/90 shadow-lg flex items-center justify-center pointer-events-auto transition-opacity ${currentIndex === activeCards.length - 1 ? 'opacity-0' : 'opacity-100 hover:bg-white'}`}
+                  >
+                    <ChevronRight size={24} className="text-gray-800 ml-0.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="pb-8 flex justify-center gap-2">
+                {activeCards.map((_, idx) => (
+                  <div 
+                    key={idx}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentIndex ? 'w-6 bg-gray-800' : 'w-1.5 bg-gray-300'}`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* --- [核心修复] 浮层：生成长图的结果预览 --- */}
+            {showLongImage && (
+              <div className="absolute inset-0 bg-black/90 z-[60] flex flex-col text-white backdrop-blur-md animate-in fade-in duration-300">
+                {/* 顶部标题栏 */}
+                <div className="flex justify-between items-center p-6 pt-12 shrink-0">
+                  <span className="font-bold text-lg tracking-wide">分享预览</span>
+                  <button onClick={() => setShowLongImage(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                    <X size={24} className="text-gray-300" />
+                  </button>
+                </div>
+                
+                {/* 长图滚动区 */}
+                <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col items-center custom-scrollbar">
+                  
+                  {/* 这就是被截屏“生成”的长图本体 */}
+                  <div className="w-full max-w-[340px] bg-white rounded-[24px] p-6 flex flex-col gap-5 shadow-2xl shrink-0 border border-white/10 relative overflow-hidden">
+                    
+                    {/* 海报头部 */}
+                    <div className="text-center pb-4 border-b border-gray-100 mb-2">
+                      <div className="text-gray-900 font-extrabold text-[20px] tracking-tight">智能速览</div>
+                      <div className="text-gray-400 text-[11px] mt-1.5 font-medium">AI 提炼精华 · 极速掌握</div>
+                    </div>
+                    
+                    {/* 遍历渲染卡片内容 */}
+                    {activeCards.filter(c => c.type !== 'action').map((card, i) => (
+                      <div key={i} className={`rounded-[16px] p-5 shadow-sm ${card.bgClass ? card.bgClass : 'bg-[#f8f9fa] border border-gray-100/50'}`}>
+                        
+                        {/* 卡片标题 */}
+                        <div className={`text-[12px] font-bold mb-3 uppercase tracking-wider flex items-center gap-1.5 ${card.bgClass ? 'text-white/80' : 'text-indigo-600'}`}>
+                          {card.bgClass && <Sparkles size={14} />}
+                          {card.title}
+                        </div>
+                        
+                        {/* 核心内容 */}
+                        {card.content && (
+                          <div className={`text-[15px] font-bold leading-[1.6] ${card.bgClass ? 'text-white' : 'text-gray-900'} ${card.type === 'insight' ? 'mb-4' : 'mb-0'}`}>
+                            {card.content}
+                          </div>
+                        )}
+
+                        {/* 洞察卡片的原文截取 */}
+                        {card.type === 'insight' && card.sourceText && (
+                          <div className="text-[13px] text-gray-500 bg-white p-3.5 rounded-xl border-l-[3px] border-indigo-400 leading-relaxed shadow-sm">
+                            “{card.sourceText}”
+                          </div>
+                        )}
+                        
+                        {/* SOP卡片的前置条件 */}
+                        {card.type === 'prerequisite' && card.requirements && (
+                          <div className="flex flex-col gap-2 mt-4">
+                            {card.requirements.map((req, idx) => (
+                              <div key={idx} className="text-[13px] text-white/95 bg-black/20 px-3 py-2.5 rounded-lg flex items-center gap-2">
+                                <CheckSquare size={14} className="text-orange-200" /> {req}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* SOP卡片的步骤 Tips */}
+                        {card.type === 'step' && card.tips && (
+                          <div className="text-[12px] text-orange-800 bg-orange-50 p-3 rounded-xl mt-3 border border-orange-100/50">
+                            {card.tips}
+                          </div>
+                        )}
+
+                        {/* 数据卡片的核心指标 */}
+                        {card.type === 'metric' && card.metric && (
+                          <div className="flex items-end gap-2 mt-4">
+                            <span className="text-4xl font-black text-white tracking-tighter">{card.metric}</span>
+                            <span className="text-[12px] text-emerald-100 mb-1.5 line-clamp-1">{card.subText}</span>
+                          </div>
+                        )}
+
+                        {/* 数据卡片的红黑榜列表 */}
+                        {card.type === 'ranking' && card.items && (
+                          <div className="flex flex-col gap-2 mt-4">
+                            {card.items.map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-[13px] border-b border-gray-200/50 pb-2 last:border-0 last:pb-0">
+                                <span className="text-gray-700 font-medium">{item.name}</span>
+                                <span className={`font-bold ${item.isPositive ? 'text-emerald-600' : 'text-red-600'}`}>{item.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    
+                    {/* 海报底部角标/留白 */}
+                    <div className="pt-5 mt-2 border-t border-gray-100 flex justify-between items-end">
+                      <div>
+                        <div className="text-gray-800 font-bold text-[13px] flex items-center gap-1.5">
+                          <Sparkles size={14} className="text-indigo-500" /> AI 文档助手
+                        </div>
+                        <div className="text-gray-400 text-[10px] mt-1.5">长按识别小程序，体验完整功能</div>
+                      </div>
+                      {/* 模拟二维码 */}
+                      <div className="w-12 h-12 bg-[#f4f5f7] rounded-lg flex items-center justify-center text-gray-400 shadow-inner border border-gray-100">
+                        <LayoutGrid size={20} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 底部操作按钮 */}
+                <div className="p-6 pb-10 flex gap-4 bg-gradient-to-t from-black via-black/80 to-transparent shrink-0">
+                  <button className="flex-1 bg-white/15 py-4 rounded-[16px] flex items-center justify-center gap-2 font-semibold hover:bg-white/25 transition-colors backdrop-blur-sm">
+                    <Download size={18} /> 保存到相册
+                  </button>
+                  <button className="flex-1 bg-emerald-500 py-4 rounded-[16px] flex items-center justify-center gap-2 font-semibold hover:bg-emerald-400 transition-colors text-white shadow-lg shadow-emerald-500/30">
+                    <Share2 size={18} /> 发送给朋友
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      );
+    }
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
